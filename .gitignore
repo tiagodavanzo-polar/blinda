@@ -1,0 +1,19 @@
+# Ignorar arquivos específicos
+config.php
+.env
+.env.local
+php_errors.log
+
+# --- Sistema Operacional e IDEs ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Ignorar pastas inteiras
+upload/
