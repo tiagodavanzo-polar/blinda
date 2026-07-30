@@ -26,6 +26,7 @@
 
     $compras = ['OC_SP' => $sku['OC_SP'], 'OC_M' => $sku['OC_M'], 'OC_ES' => $sku['OC_ES'], 'OC_RJ_3' => $sku['OC_RJ_3']];
 
+    $sku['SALDO'] = $sku['SALDO'] + $sku['SALDO_RASCUNHO'];
     $sku['DISPONIVEL'] = $sku['DISPONIVEL'] + $sku['SALDO_RASCUNHO'];
 
     $alerta = '';
@@ -225,112 +226,82 @@
                 $htmlDisponivel = '';
                 $estoqueSKU = $sku['ESTOQUE'];
                 $totalEstoque = 0;
-                $rascunhoSKU = $sku['SALDO_RASCUNHO'];
+                $rascunhoSKU = $sku['SALDO_RASCUNHO']; //150 040029
                 $totalRascunho = 0;
-                $comprasSKU = $sku['COMPRAS'];
+                $comprasSKU = $sku['COMPRAS']; //50 040029
                 $totalCompras = 0;
                 $comprarLinha = 0;
                 $totalComprar = 0;
 
-                foreach($demandas as $demanda)
-                {
+                foreach ($demandas as $demanda) {
                     $dataEntrega = new DateTime($demanda['DTENTREGAITEM']);
-
-                    $totalDemanda += $demanda['QTDE'];
+                    $qtdeDemanda = $demanda['QTDE'];
+                    $totalDemanda += $qtdeDemanda;
 
                     $cssClass = '';
+                    $rascunhoLinha = 0;
+                    $comprasLinha = 0;
+                    $comprarLinha = 0;
 
-                    switch(true)
-                    {
-                        case ($estoqueSKU > 0 && $demanda['QTDE'] <= $estoqueSKU): 
-                            $cssClass = 'class="bg-success"'; 
-                            $totalEstoque += $demanda['QTDE']; 
-                            $estoqueSKU -= $demanda['QTDE']; 
-                            $comprasSKU = '-'; 
+                    switch (true) {
+                        // 1. Atendido 100% pelo ESTOQUE (Verde)
+                        case ($estoqueSKU >= $qtdeDemanda):
+                            $cssClass = 'class="bg-success"';
+                            $totalEstoque += $qtdeDemanda;
+                            $estoqueSKU -= $qtdeDemanda;
                             break;
 
-                        case ($estoqueSKU > 0 && $sku['COMPRAS'] > 0 && $demanda['QTDE'] > $estoqueSKU): 
-                            $cssClass = 'class="bg-info"'; 
-                            if($totalCompras == 0) 
-                                $comprasSKU = $sku['COMPRAS'];
-                            $totalEstoque += $estoqueSKU; 
-                            $comprasSKU -= $demanda['QTDE'] - $estoqueSKU; 
-                            $totalCompras += $demanda['QTDE'] - $estoqueSKU;
-                            $estoqueSKU -= $estoqueSKU; 
+                        // 2. Atendido parcial ou totalmente pelo RASCUNHO (Laranja)
+                        case (($estoqueSKU + $rascunhoSKU) >= $qtdeDemanda):
+                            $cssClass = 'class="bg-warning"';
+                            $restoDemanda = $qtdeDemanda - $estoqueSKU;
+                            
+                            $totalEstoque += $estoqueSKU;
+                            $estoqueSKU = 0;
+
+                            $rascunhoSKU -= $restoDemanda;
+                            $rascunhoLinha = $restoDemanda;
+                            $totalRascunho += $restoDemanda;
                             break;
 
-                        case ($estoqueSKU == 0 && $comprasSKU > 0 && $demanda['QTDE'] <= $comprasSKU):
-                            $cssClass = 'class="bg-info"'; 
-                            $totalCompras += $demanda['QTDE']; 
-                            $comprasSKU -= $demanda['QTDE']; 
+                        // 3. Atendido parcial ou totalmente por COMPRAS (Azul)
+                        case (($estoqueSKU + $rascunhoSKU + $comprasSKU) >= $qtdeDemanda):
+                            $cssClass = 'class="bg-info"';
+                            $restoDemanda = $qtdeDemanda - ($estoqueSKU + $rascunhoSKU);
+
+                            $totalEstoque += $estoqueSKU;
+                            $estoqueSKU = 0;
+
+                            $totalRascunho += $rascunhoSKU;
+                            $rascunhoLinha = $rascunhoSKU;
+                            $rascunhoSKU = 0;
+
+                            $comprasSKU -= $restoDemanda;
+                            $comprasLinha = $restoDemanda;
+                            $totalCompras += $restoDemanda;
                             break;
 
-                        case ($estoqueSKU == 0 && $comprasSKU > 0 && $demanda['QTDE'] > $comprasSKU):
-                            $cssClass = 'class="bg-info"'; 
-                            $totalCompras += $comprasSKU; 
-                            $comprarLinha = $demanda['QTDE'] - $comprasSKU;
-                            $totalComprar += $comprarLinha;
-                            $comprasSKU = 0; 
-                            break;
+                        // 4. NÃO atende (Vermelho) - Precisa comprar a diferença restante
+                        default:
+                            $cssClass = 'class="bg-danger"';
+                            $falta = $qtdeDemanda - ($estoqueSKU + $rascunhoSKU + $comprasSKU);
 
-                        case ($estoqueSKU > 0 && $sku['COMPRAS'] == 0 && $demanda['QTDE'] > $estoqueSKU): 
-                            $cssClass = 'class="bg-danger"'; 
-                            $totalEstoque += $estoqueSKU; 
-                            $comprarLinha = $demanda['QTDE'] - $estoqueSKU;
-                            $totalComprar += $comprarLinha;
-                            $estoqueSKU -= $estoqueSKU; 
-                            break;
+                            $totalEstoque += $estoqueSKU;
+                            $estoqueSKU = 0;
 
-                        case ($estoqueSKU == 0 && ($comprasSKU == 0 || $sku['COMPRAS'] == 0)):
-                            $cssClass = 'class="bg-danger"'; 
-                            $estoqueSKU = 0; 
-                            $comprasSKU = 0; 
-                            $comprarLinha = $demanda['QTDE'];
-                            $totalComprar += $comprarLinha;
+                            $totalRascunho += $rascunhoSKU;
+                            $rascunhoLinha = $rascunhoSKU;
+                            $rascunhoSKU = 0;
+
+                            $totalCompras += $comprasSKU;
+                            $comprasLinha = $comprasSKU;
+                            $comprasSKU = 0;
+
+                            $comprarLinha = $falta;
+                            $totalComprar += $falta;
                             break;
                     }
 
-                    $totalCompras = ($comprasSKU > 0) ? $totalCompras + $comprasSKU : $totalCompras;
-
-                    /*switch($totalDemanda)
-                    {
-                        case ($totalDemanda <= $sku['ESTOQUE']): $cssClass = 'class="bg-success"'; $estoqueSKU -= $demanda['QTDE']; $totalEstoque += $demanda['QTDE']; $comprasSKU = '-'; break;
-                        case ($totalDemanda > $sku['ESTOQUE'] && $sku['COMPRAS'] > 0 && ($totalDemanda <= $sku['ESTOQUE'] + $sku['COMPRAS'])): 
-                            $cssClass = 'class="bg-warning"'; 
-                            if($totalEstoque != $sku['ESTOQUE'])
-                            {
-                                $estoqueSKU = 0;
-                                $totalEstoque += $sku['ESTOQUE'] - $totalEstoque;
-                                $totalCompras += $demanda['QTDE'] - ($sku['ESTOQUE'] - $totalEstoque);
-                            }
-                            else
-                            {
-                                $estoqueSKU = '-';
-                                $totalCompras += $demanda['QTDE'];
-                            }
-                            
-                            if($estoqueSKU == 0)
-                            {
-                                $comprasSKU = ($totalCompras == 0) ? $sku['COMPRAS'] : $comprasSKU;
-                                if($totalCompras != $sku['COMPRAS'])
-                                {
-                                    //$comprasSKU = 0;
-                                    $totalCompras += $demanda['QTDE'] - ($sku['ESTOQUE'] - $totalEstoque);
-                                }
-                                else
-                                {
-                                    $comprasSKU = '-';
-                                    $totalCompras += $demanda['QTDE'];
-                                }
-                            }
-
-                            break;
-                        case ($totalDemanda > $sku['ESTOQUE'] + $sku['COMPRAS']): 
-                            $cssClass = 'class="bg-danger"'; 
-                            $estoqueSKU = '-'; 
-                            break;
-                    } */                 
-                
                     $htmlDemandas .= 
                     "<tr>
                         <th class='text-center'>{$demanda['PROCESSO']}</th>
@@ -345,9 +316,11 @@
                         <th class='text-center'>{$demanda['QTDE']}</th>
                     </tr>";
 
-                    $estoqueSKU = ($estoqueSKU == 0) ? '-' : $estoqueSKU;
-                    $comprasSKU = ($comprasSKU == 0) ? '-' : $comprasSKU;
-                    $comprarLinha = ($comprarLinha == 0) ? '-' : $comprarLinha;
+                    // Formatação visual para hifenizar zeros nas células das linhas
+                    $exibirEstoque  = ($estoqueSKU <= 0)  ? '-' : $estoqueSKU;
+                    $exibirRascunho = ($rascunhoLinha <= 0) ? '-' : $rascunhoLinha;
+                    $exibirCompras  = ($comprasLinha <= 0)  ? '-' : $comprasLinha;
+                    $exibirComprar  = ($comprarLinha <= 0)  ? '-' : $comprarLinha;
 
                     $htmlDisponivel .= 
                     "<tr {$cssClass}>
@@ -361,18 +334,15 @@
                         <th class='text-center'>{$demanda['NIVEL']}</th>
                         <th class='text-center'>{$dataEntrega->format('d/m/Y')}</th>
                         <th class='text-center'>{$demanda['QTDE']}</th>
-                        <th class='text-center'>{$estoqueSKU}</th>
-                        <th class='text-center'>{$comprasSKU}</th>
-                        <th class='text-center'>{$comprarLinha}</th>
+                        <th class='text-center'>{$exibirEstoque}</th>
+                        <th class='text-center'>{$exibirRascunho}</th>
+                        <th class='text-center'>{$exibirCompras}</th>
+                        <th class='text-center'>{$exibirComprar}</th>
                     </tr>";
-
-                    $estoqueSKU = ($estoqueSKU == '-') ? 0 : $estoqueSKU;
-                    $comprasSKU = ($comprasSKU == '-') ? 0 : $comprasSKU;
-                    $comprarLinha = ($comprarLinha == '-') ? 0 : $comprarLinha;
                 }
 
                 $totalDemanda = formataValor($totalDemanda);
-                
+
                 $htmlDemandas .= 
                 "<tr>
                     <th scope='col' colspan='10'>&nbsp;</th>
@@ -390,6 +360,7 @@
                     <th scope='col' colspan='9' class='text-right'>TOTAL</th>
                     <th scope='col' class='text-center'>{$totalDemanda}</th>
                     <th scope='col' class='text-center'>{$totalEstoque}</th>
+                    <th scope='col' class='text-center'>{$totalRascunho}</th>
                     <th scope='col' class='text-center'>{$totalCompras}</th>
                     <th scope='col' class='text-center'>{$totalComprar}</th>
                 </tr>";
@@ -498,6 +469,7 @@
                     <th scope="col" class="text-center">ENTREGA</th>
                     <th scope="col" class="text-center">QTDE</th>
                     <th scope="col" class="text-center">ESTOQUE</th>
+                    <th scope="col" class="text-center">RASCUNHO</th>
                     <th scope="col" class="text-center">COMPRAS</th>
                     <th scope="col" class="text-center">COMPRAR</th>
                 </tr>
