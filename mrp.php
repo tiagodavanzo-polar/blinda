@@ -198,6 +198,9 @@
 							<button class="filter-trigger" id="btn-filtro-processo">⏳ Processos</button>
 							<div class="filter-popover" id="popover-filtro-processo"></div>
 						</div>
+						<div class="filter-container">
+							<button id="btnLimparFiltros" class="btn btn-secondary" type="button">🧹Limpar</button>
+						</div>
 					</div>
 				</div>
 				<!--<div class="col-xl-12">
@@ -304,147 +307,264 @@
 		});*/
 
 		// Armazena as configurações de cada filtro ativo para podermos varrer todos em lote
-		// 1. Lista global que gerenciará os múltiplos filtros em cascata
+		// Array global para armazenar os filtros ativos
 		const filtrosRegistrados = [];
 
-		// 2. Função genérica que configura e escuta as mudanças do filtro
 		function registrarFiltro(mrp, nomeFiltro, indiceColuna) {
 			const $popover = $(`#popover-filtro-${nomeFiltro}`);
 			const $trigger = $(`#btn-filtro-${nomeFiltro}`);
 
-			// Validação de segurança: se o HTML não existir na página, avisa o desenvolvedor
 			if ($popover.length === 0 || $trigger.length === 0) {
 				console.error(`Erro: Elementos HTML para o filtro "${nomeFiltro}" não foram encontrados.`);
 				return;
 			}
 
-			// Cria a div interna que conterá os checkboxes de forma isolada (evita apagar inputs de busca se houver)
-			if ($popover.find('.lista-checkboxes').length === 0) {
-				$popover.append('<div class="lista-checkboxes" style="max-height:180px; overflow-y:auto;"></div>');
+			// 1. Injeta o Input de Busca
+			if ($popover.find('.input-busca-popover').length === 0) {
+				$popover.prepend(`
+					<div style="padding: 6px; border-bottom: 1px solid #eee;">
+						<input type="text" 
+							class="form-control form-control-sm input-busca-popover" 
+							placeholder="Pesquisar..." 
+							style="width: 100%; box-sizing: border-box;">
+					</div>
+					<div class="container-selecionar-todos" style="padding: 4px 8px; border-bottom: 1px solid #eee;">
+						<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:bold; margin:0; font-size:13px;">
+							<input type="checkbox" class="chk-selecionar-todos"> Todos
+						</label>
+					</div>
+				`);
 			}
 
-			// Adiciona o filtro na lista global de monitoramento
+			// 2. Injeta o contêiner isolado dos Checkboxes
+			if ($popover.find('.lista-checkboxes').length === 0) {
+				$popover.append('<div class="lista-checkboxes" style="max-height: 180px; overflow-y: auto; padding: 4px 0;"></div>');
+			}
+
 			filtrosRegistrados.push({ mrp, nomeFiltro, indiceColuna, $popover, $trigger });
 
-			// Evento de Clique para Abrir/Fechar Popover (Garante que cliques não acumulem com .off())
+			// Evento: Abrir/Fechar Popover
 			$trigger.off('click').on('click', function(e) {
 				e.stopPropagation();
 				filtrosRegistrados.forEach(function(outroFiltro) {
-					// Se o filtro do loop NÃO for este que acabei de clicar, força a ocultação dele
 					if (outroFiltro.nomeFiltro !== nomeFiltro) {
 						outroFiltro.$popover.hide();
 					}
 				});
 				
 				$popover.toggle();
+
+				if ($popover.is(':visible')) {
+					$popover.find('.input-busca-popover').focus();
+				}
 			});
 
-			// Evento disparado quando o usuário marca/desmarca uma opção
-			$popover.off('change', 'input[type="checkbox"]').on('change', 'input[type="checkbox"]', function() {
-				const selecionados = $popover.find('input:checked').map(function() {
-					return $.fn.dataTable.util.escapeRegex($(this).val());
-				}).get();
+			// Evento: Filtragem interna por texto digitado
+			$popover.off('input', '.input-busca-popover').on('input', '.input-busca-popover', function() {
+				const termo = $(this).val().toLowerCase().trim();
+				
+				$popover.find('.lista-checkboxes .filter-option').each(function() {
+					const textoOpcao = $(this).text().toLowerCase();
+					if (textoOpcao.includes(termo)) {
+						$(this).css('display', 'flex');
+					} else {
+						$(this).hide();
+					}
+				});
 
-				if (selecionados.length > 0) {
-					const buscaRegex = selecionados.join('|');
-					const buscaRegexExata = '(^|,)\\s*(' + buscaRegex + ')\\s*(,|$)';
-					mrp.column(indiceColuna).search(buscaRegexExata, true, false);
+				atualizarEstadoSelecionarTodos($popover);
+			});
+
+			// Evento: Clique em "(Selecionar Todos)"
+			$popover.off('change', '.chk-selecionar-todos').on('change', '.chk-selecionar-todos', function() {
+				const estaMarcado = $(this).is(':checked');
+
+				if (estaMarcado) {
+					// Marca apenas os checkboxes visíveis na busca
+					$popover.find('.lista-checkboxes .filter-option:visible input[type="checkbox"]').prop('checked', true);
 				} else {
-					mrp.column(indiceColuna).search('');
+					// Desmarca TODOS os checkboxes
+					$popover.find('.lista-checkboxes input[type="checkbox"]').prop('checked', false);
 				}
 
-				// Aplica o filtro na tabela de forma global e atualiza em cascata as outras caixas
-				mrp.draw();
-				atualizarTodosOsPopovers();
+				aplicarFiltroDataTables(mrp, indiceColuna, $popover);
+			});
+
+			// Evento: Marcação/Desmarcação de um Checkbox individual
+			$popover.off('change', '.lista-checkboxes input[type="checkbox"]').on('change', '.lista-checkboxes input[type="checkbox"]', function() {
+				atualizarEstadoSelecionarTodos($popover);
+				aplicarFiltroDataTables(mrp, indiceColuna, $popover);
 			});
 		}
 
-		// 3. Função que varre a tabela e constrói dinamicamente os checkboxes
+		// Função auxiliar para aplicar a busca no DataTables e redesenhar
+		function aplicarFiltroDataTables(mrp, indiceColuna, $popover) {
+			const selecionados = $popover.find('.lista-checkboxes input:checked').map(function() {
+				return $.fn.dataTable.util.escapeRegex($(this).val());
+			}).get();
+
+			if (selecionados.length > 0) {
+				const buscaRegex = selecionados.join('|');
+				const buscaRegexExata = '(^|,)\\s*(' + buscaRegex + ')\\s*(,|$)';
+				mrp.column(indiceColuna).search(buscaRegexExata, true, false);
+			} else {
+				mrp.column(indiceColuna).search('');
+			}
+
+			mrp.draw();
+			atualizarTodosOsPopovers();
+		}
+
+		// Função auxiliar para alinhar o estado do "Selecionar Todos" com as opções individuais
+		function atualizarEstadoSelecionarTodos($popover) {
+			const $visiveis = $popover.find('.lista-checkboxes .filter-option:visible input[type="checkbox"]');
+			const $marcadosVisiveis = $visiveis.filter(':checked');
+
+			const $chkTodos = $popover.find('.chk-selecionar-todos');
+
+			if ($visiveis.length > 0 && $visiveis.length === $marcadosVisiveis.length) {
+				$chkTodos.prop('checked', true).prop('indeterminate', false);
+			} else if ($marcadosVisiveis.length > 0) {
+				// Estado "meio marcado" quando alguns estão selecionados (opcional, deixa a UI mais moderna)
+				$chkTodos.prop('checked', false).prop('indeterminate', true);
+			} else {
+				$chkTodos.prop('checked', false).prop('indeterminate', false);
+			}
+		}
+
 		function atualizarTodosOsPopovers() {
 			if (filtrosRegistrados.length === 0) return;
 
 			filtrosRegistrados.forEach(function(config) {
 				const { mrp, nomeFiltro, indiceColuna, $popover, $trigger } = config;
 				const $lista = $popover.find('.lista-checkboxes');
+				const $inputBusca = $popover.find('.input-busca-popover');
 
-				// 1. Salva os itens que o usuário já tinha marcado neste popover
-				const marcadosAnteriormente = $popover.find('input:checked').map(function() {
+				const termoBuscaAtual = $inputBusca.val() || '';
+
+				const marcadosAnteriormente = $popover.find('.lista-checkboxes input:checked').map(function() {
 					return $(this).val();
 				}).get();
 
-				// 2. Guarda temporariamente o filtro atual desta coluna para não perdê-lo
 				const buscaAtualDestaColuna = mrp.column(indiceColuna).search();
-
-				// 3. A MÁGICA: Limpa temporariamente a busca DESTA coluna.
-				// Isso faz com que a tabela finja que esta coluna não está filtrada, 
-				// mas mantém os filtros de todas as OUTRAS colunas ao redor ativos!
 				mrp.column(indiceColuna).search('');
 
 				$lista.empty();
 				const itensUnicos = new Set();
 
-				// 4. Agora lemos os dados com { search: 'applied' }
-				// Ele vai trazer os dados considerando apenas os impactos dos OUTROS filtros!
 				mrp.column(indiceColuna, { search: 'applied' }).data().each(function(valoresCelula) {
 					if (valoresCelula) {
 						if (typeof valoresCelula === 'string') {
 							const partes = valoresCelula.split(',');
 							partes.forEach(item => itensUnicos.add(item.trim()));
-						} 
-						else if (Array.isArray(valoresCelula)) {
+						} else if (Array.isArray(valoresCelula)) {
 							valoresCelula.forEach(item => itensUnicos.add(String(item).trim()));
 						}
 					}
 				});
 
-				// 5. RESTAURA o filtro original desta coluna para que a tabela principal continue filtrada corretamente
 				mrp.column(indiceColuna).search(buscaAtualDestaColuna);
 
-				// Garante que o item marcado continue na lista por segurança
 				marcadosAnteriormente.forEach(item => itensUnicos.add(item));
 
-				// 6. Desenha os checkboxes na tela
 				if (itensUnicos.size === 0) {
 					$lista.append('<small style="color:#999; padding:4px 8px; display:block;">Nenhuma opção</small>');
 				} else {
 					Array.from(itensUnicos).sort().forEach(function(valor) {
 						const isChecked = marcadosAnteriormente.includes(valor) ? 'checked' : '';
+						const visivel = termoBuscaAtual === '' || valor.toLowerCase().includes(termoBuscaAtual.toLowerCase()) ? 'display: flex;' : 'display: none;';
+
 						$lista.append(`
-							<label class="filter-option" style="display:flex; align-items:center; gap:8px; padding:4px 8px; cursor:pointer;">
+							<label class="filter-option" style="align-items:center; gap:8px; padding:4px 8px; cursor:pointer; ${visivel}">
 								<input type="checkbox" value="${valor}" ${isChecked}> ${valor}
 							</label>
 						`);
 					});
 				}
 
-				let lblFiltro = (nomeFiltro == 'tipo-sku') ? 'Tipo SKU' : nomeFiltro.charAt(0).toUpperCase() + nomeFiltro.slice(1);
+				// Sincroniza a caixa "Selecionar Todos" após reconstruir a lista
+				atualizarEstadoSelecionarTodos($popover);
 
-				// Atualiza a contagem no botão
+				// Atualiza a contagem dos botões
+				let lblFiltro = (nomeFiltro === 'tipo-sku') ? 'Tipo SKU' : nomeFiltro.charAt(0).toUpperCase() + nomeFiltro.slice(1);
+				if (nomeFiltro === 'processo') lblFiltro = 'Processos';
+				if (nomeFiltro === 'fabricante') lblFiltro = 'Fabricantes';
+
 				if (marcadosAnteriormente.length > 0) {
-					$trigger.text(`⏳ ${lblFiltro}s (${marcadosAnteriormente.length})`);
-					//$trigger.text(`⏳ ${nomeFiltro.charAt(0).toUpperCase() + nomeFiltro.slice(1)}s (${marcadosAnteriormente.length})`);
+					$trigger.text(`⏳ ${lblFiltro} (${marcadosAnteriormente.length})`);
 				} else {
-					$trigger.text('⏳ ' + lblFiltro);
-					//$trigger.text('⏳ ' + nomeFiltro.charAt(0).toUpperCase() + nomeFiltro.slice(1));
+					$trigger.text(`⏳ ${lblFiltro}`);
 				}
 			});
 		}
 
-		function atualizarFiltros()
-		{
+		// Inicialização dos 3 Filtros apontando para a instância do DataTables
+		function atualizarFiltros() {
+			// Limpa registros anteriores em caso de reinicialização
+			filtrosRegistrados.length = 0; 
+
+			// Registro dos 3 filtros com seus respectivos índices de coluna da tabela
 			registrarFiltro($.fn.dataTable.Api('#mrp'), 'fabricante', 5);
 			registrarFiltro($.fn.dataTable.Api('#mrp'), 'tipo-sku', 12);
 			registrarFiltro($.fn.dataTable.Api('#mrp'), 'processo', 13);
+
+			// Popula as listas de checkboxes pela primeira vez
 			atualizarTodosOsPopovers();
 		}
 
-		// Fechamento genérico de popover ao clicar fora da área deles
+		// Fechamento genérico dos popovers ao clicar fora deles
 		$(document).on('click', function(e) {
 			filtrosRegistrados.forEach(function(config) {
 				if (!config.$popover.is(e.target) && config.$popover.has(e.target).length === 0 && !config.$trigger.is(e.target)) {
 					config.$popover.hide();
 				}
 			});
+		});
+
+		function limparMarcacoesPorTabela(idTabelaSemHash) {
+			forcarResetVisual = true;
+
+			let tabelaParaDesenhar = null;
+			const idAlvo = String(idTabelaSemHash).trim().toLowerCase();
+
+			filtrosRegistrados.forEach(function(config) {
+				const idTabelaAtual = config.mrp.context[0]?.sTableId || $(config.mrp.table().node()).attr('id');
+				
+				if (idTabelaAtual && idTabelaAtual.trim().toLowerCase() === idAlvo) {
+					// 1. Desmarca visualmente as caixas HTML (opções individuais e Selecionar Todos)
+					config.$popover.find('input[type="checkbox"]').prop('checked', false).prop('indeterminate', false);
+
+					// ---------------------------------------------------------------------------
+					// 2. LINHAS ADICIONADAS: Limpa o input de busca interno e reexibe todas as opções
+					// ---------------------------------------------------------------------------
+					config.$popover.find('.input-busca-popover').val('');
+					config.$popover.find('.lista-checkboxes .filter-option').show();
+					// ---------------------------------------------------------------------------
+
+					// 3. Zera a busca específica desta coluna
+					config.mrp.column(config.indiceColuna).search('');
+					
+					tabelaParaDesenhar = config.mrp;
+				}
+			});
+
+			// Reconstrói os popovers
+			atualizarTodosOsPopovers();
+
+			forcarResetVisual = false;
+
+			// Se encontramos a tabela correspondente, aplica o redesenho
+			if (tabelaParaDesenhar) {
+				tabelaParaDesenhar.search(''); // Limpa a busca global
+				tabelaParaDesenhar.draw(false); 
+			} else {
+				alert('Erro: Nenhuma tabela correspondente foi encontrada no array filtrosRegistrados.');
+			}
+		}
+
+
+		$('#btnLimparFiltros').on('click', function() {
+			limparMarcacoesPorTabela('mrp');
 		});
 
 		var mrpdt = $('#mrp').DataTable({
@@ -541,6 +661,8 @@
 				classList.add('selected');
 			}
 		});
+
+		//inicializarFiltrosMRP($.fn.dataTable.Api('#mrp'));
 
 		/*$('#filtroFabricantes').on('change', function() {
 			var valores = $(this).val(); // Retorna uma array com as opções selecionadas
