@@ -187,6 +187,9 @@
 					<div class="toolbar-filtros">
 						<!--<span>Filtrar por Fabricante:</span>-->
 						<div class="filter-container">
+							<input type="text" id="inputBuscaSKU" class="form-control" placeholder="Informe um SKU" style="max-width: 300px;">
+						</div>
+						<div class="filter-container">
 							<button class="filter-trigger" id="btn-filtro-fabricante">⏳ Fabricantes</button>
 							<div class="filter-popover" id="popover-filtro-fabricante"></div>
 						</div>
@@ -555,12 +558,32 @@
 
 			// Se encontramos a tabela correspondente, aplica o redesenho
 			if (tabelaParaDesenhar) {
+
+			const indiceColunaSKU = 1; // <-- Use o mesmo índice da coluna SKU definido no seu evento
+			$('#inputBuscaSKU').val(''); 
+			tabelaParaDesenhar.column(indiceColunaSKU).search('');
+
 				tabelaParaDesenhar.search(''); // Limpa a busca global
 				tabelaParaDesenhar.draw(false); 
 			} else {
 				alert('Erro: Nenhuma tabela correspondente foi encontrada no array filtrosRegistrados.');
 			}
 		}
+
+		// Captura a digitação no input do SKU
+		$('#inputBuscaSKU').on('input keyup', function() {
+			const termo = $(this).val().trim();
+			const indiceColunaSKU = 1; // <-- AJUSTE AQUI para o índice correto da sua coluna SKU
+
+			// Verifica se a quantidade de caracteres é MAIOR do que 3
+			if (termo.length > 2) {
+				// Aplica a busca apenas na coluna do SKU
+				$.fn.dataTable.Api('#mrp').column(indiceColunaSKU).search(termo).draw();
+			} else {
+				// Se apagar ou tiver 3 caracteres ou menos, limpa a busca dessa coluna
+				$.fn.dataTable.Api('#mrp').column(indiceColunaSKU).search('').draw();
+			}
+		});
 
 
 		$('#btnLimparFiltros').on('click', function() {
