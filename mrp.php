@@ -178,7 +178,7 @@
         
         <div class="content-wrapper" style="min-height:1100px !important;">
 			<div class="row">
-				<div class="col-xl-12">
+				<div class="col-xl-12 pt-2">
 					<h4 class="text-danger text-center">Compras MRP</h4>
 				</div>
 			</div>
