@@ -319,7 +319,7 @@
 
 		foreach ($resultado['ORIGEM_DEMANDA'] as $demanda) {
 			$sku = ($demanda['NIVEL'] == 'ROOT') ? $demanda['PAI_SKU'] : $demanda['SKUCOMP'];
-			$processo = $demanda['PROCESSO'];
+			$processo = "{$demanda['PROCESSO']}-{$demanda['NUMITEMPEDIDO']}";
 			
 			// Agrupa os processos dentro da chave do SKU correspondente
 			//$processosPorSku[$sku][] = $processo;
