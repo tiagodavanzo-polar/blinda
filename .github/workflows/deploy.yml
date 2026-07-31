@@ -17,6 +17,6 @@ jobs:
         run: |
           # Digite aqui os comandos para mover os arquivos ou reiniciar seu app
           # Exemplo: cp -r * /var/www/html/ echo "Arquivos baixados com sucesso no servidor!"
-          robocopy . "C:\Apache64\htdocs\blinda-git" /E /Z /R:5 /W:5
+          robocopy . "C:\Apache64\htdocs\blinda" /E /Z /R:5 /W:5
           if ($lastexitcode -le 8) { exit 0 } else { exit $lastexitcode }
           Write-Output "Deploy concluído com sucesso!"
