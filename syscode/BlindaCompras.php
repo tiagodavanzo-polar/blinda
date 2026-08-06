@@ -84,6 +84,35 @@ class BlindaCompras
 		return ['SKU' => $tabelas[0], 'ORIGEM_DEMANDA' => $tabelas[1]];*/
 	}
 
+	public static function MPS($tipo = 0, $sku = null, $db = 'CorporeRM')
+	{
+		$con = ConexaoBlinda($db);
+
+		$con->setAttribute(PDO::ATTR_EMULATE_PREPARES, true);
+    	$con->setAttribute(PDO::SQLSRV_ATTR_DIRECT_QUERY, true);
+
+		$sql = '';
+
+		if (is_null($sku)) {
+			$sql = "SET NOCOUNT ON; EXEC usp_MPS ? WITH RECOMPILE";
+			$stmt = $con->prepare($sql);
+			$stmt->bindValue(1, $tipo, PDO::PARAM_INT);
+		} else {
+			$sql = "SET NOCOUNT ON; EXEC usp_MPS ?, ? WITH RECOMPILE";
+			$stmt = $con->prepare($sql);
+			$stmt->bindValue(1, $tipo, PDO::PARAM_INT);
+			$stmt->bindValue(2, $sku, PDO::PARAM_STR);
+		}
+
+		$stmt->execute();
+
+		$fetch = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+		$stmt->closeCursor();
+
+		return $fetch;
+	}
+
 	public static function OrdensCompra($sku, $db = 'CorporeRM')
 	{
 		$con = ConexaoBlinda($db);

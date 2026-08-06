@@ -4,6 +4,20 @@
 	require_once "../config.php";
 	require_once "../php/verifica.php"; 
 	extract($_POST);
+
+	/*$resultado = BlindaCompras::MPS(0);
+
+	$skupai = [];
+	foreach ($resultado['ORIGEM_DEMANDA'] as $demanda) {
+		if($demanda['NIVEL'] == 'ROOT') 
+			$skupai[$demanda['CHAVE_DEMANDA']] = $demanda;
+		else
+			$skupai[$demanda['CHAVE_DEMANDA']]['FILHOS'][] = $demanda;
+	}
+
+	echo '<pre>';
+	print_r($skupai);
+	echo'</pre>';*/
 	
 	if($acao == 'producao')
 	{
@@ -344,4 +358,62 @@
 		//$mrp = BlindaCompras::MRP(1);
 		
 		echo json_encode(['data' => $mrp]);
+	} elseif($acao == 'mps')
+	{
+		$resultado = BlindaCompras::MPS($tipo);
+
+		$skupai = [];
+		$skufilho = [];
+		foreach ($resultado as $demanda) {
+			if($demanda['NIVEL'] == 'ROOT') 
+				$skupai[] = $demanda;
+			else
+				$skufilho[] = $demanda;
+		}
+
+		// Percorre cada pai usando o & para conseguir modificar o array original diretamente
+		foreach ($skupai as &$pai) {
+			// Inicializa o array de filhos vazio para este pai
+			$pai['FILHOS'] = [];
+			
+			// Varre todos os filhos para encontrar os correspondentes
+			foreach ($skufilho as $filho) {
+				// Verifica se a CHAVE_DEMANDA do pai é igual à do filho
+				if ($pai['CHAVE_DEMANDA'] === $filho['CHAVE_DEMANDA']) {
+					// Adiciona o filho encontrado dentro deste pai
+					$pai['FILHOS'][] = $filho;
+				}
+			}
+		}
+		// Boa prática: destrói a referência para evitar bugs se a variável for usada depois
+		unset($pai); 
+
+		//echo '<pre>'.$skupai.'</pre>';
+
+		/*$processosPorSku = [];
+
+		foreach ($resultado['ORIGEM_DEMANDA'] as $demanda) {
+			$sku = ($demanda['NIVEL'] == 'ROOT') ? $demanda['PAI_SKU'] : $demanda['SKUCOMP'];
+			$processo = "{$demanda['PROCESSO']}-{$demanda['NUMITEMPEDIDO']}";
+
+			$processosPorSku[$sku][$processo] = true;
+		}
+
+		$mrp = $resultado['SKU'];
+
+		foreach ($mrp as &$produto) {
+			$sku = $produto['SKU'];
+			
+			// Busca no mapa criado. Se não existir, retorna um array vazio.
+			$processosEncontrados = $processosPorSku[$sku] ?? [];
+			
+			// Aqui você pode salvar como Array ou como String separada por vírgula.
+			// Como no seu exemplo estava "1,2,3,4,5", vamos usar o implode():
+			$produto['PROCESSOS'] = implode(',', array_keys($processosEncontrados));
+		}
+		unset($produto);
+		
+		echo json_encode(['data' => $mrp]);*/
+
+		echo json_encode(['data' => $skupai]);
 	}

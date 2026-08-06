@@ -7,7 +7,8 @@
 		'index.php' => '',
 		'producao.php' => '',
 		'engenharia.php' => '',
-		'mrp.php' => ''
+		'mrp.php' => '',
+		'mps.php' => '',
 	];
 
 	$string = explode('.', $_SESSION[Config::$uniqid]['USUARIO']);
@@ -38,7 +39,8 @@
 				<ul class="nav-2-level collapse">
 					<li><a href="producao.php" <?= $menu['producao.php']; ?>>Produção</a></li>
 					<li><a href="engenharia.php" <?= $menu['engenharia.php']; ?>>Engenharia</a></li>
-					<li><a href="mrp.php" <?= $menu['mrp.php']; ?>>Compras MRP</a></li>
+					<li><a href="mrp.php" <?= $menu['mrp.php']; ?>>MRP</a></li>
+					<li><a href="mps.php" <?= $menu['mps.php']; ?>>MPS</a></li>
 				</ul>
 			</li>			
 			<li>
