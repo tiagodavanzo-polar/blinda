@@ -33,7 +33,7 @@
 	{
 		$sql = "SELECT ID, USUARIO, SENHA, EMAIL, CODIGO, CODIGOAUX, GRUPO, SETOR FROM TUSUARIO WHERE USUARIO = ? AND SENHA = ?";
 
-		$con = ConexaoBlinda('Conteudo');
+		$con = ConexaoBlinda('Polar');
 
 		$stmt = $con->prepare($sql);
 		$stmt->execute([$login, $senha]);
